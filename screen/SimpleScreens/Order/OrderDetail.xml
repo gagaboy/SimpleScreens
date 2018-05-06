@@ -615,10 +615,11 @@ along with this software (see the LICENSE.md file). If not, see
                         <label text="Vendor" type="dt"/>
                         <container type="dd">
                             <link url="editParty" text="PartyNameTemplate" text-map="orderPartInfo.vendorDetail"
-                                    link-type="anchor" parameter-map="[partyId:orderPartInfo.vendorDetail.partyId]" condition="orderPartInfo.isVendorInternalOrg"/>
+                                    link-type="anchor" parameter-map="[partyId:orderPartInfo.vendorDetail.partyId]" condition="orderPartInfo.isVendorInternalOrg &amp;&amp; orderPartInfo.vendorDetail"/>
                             <link url="editSupplier" text="PartyNameTemplate" text-map="orderPartInfo.vendorDetail"
-                                    link-type="anchor" parameter-map="[partyId:orderPartInfo.vendorDetail.partyId]" condition="!orderPartInfo.isVendorInternalOrg"/>
+                                    link-type="anchor" parameter-map="[partyId:orderPartInfo.vendorDetail.partyId]" condition="!orderPartInfo.isVendorInternalOrg &amp;&amp; orderPartInfo.vendorDetail"/>
                         </container>
+                        <label text="Ship Method" type="dt"/>
                         <label text="${orderPartInfo.shipmentMethodEnum?.description ?: ''}" type="dd"/>
                         <label text="Ship Before" type="dt"/>
                         <label text="${ec.l10n.format(orderPartInfo.orderPart.shipBeforeDate, 'yyyy-MM-dd HH:mm') ?: '\u00a0'}" type="dd"/>
@@ -1095,7 +1096,7 @@ along with this software (see the LICENSE.md file). If not, see
                         <label text="Oldest lot ${ec.l10n.format(oldestLotExpire, 'yyyy-MM-dd')} older than last lot expire ${ec.l10n.format(newerThanExpireDate, 'yyyy-MM-dd')}"
                                 condition="orderPartInfo.newerInventory &amp;&amp; newerThanExpireDate!=null &amp;&amp; oldestLotExpire!=null &amp;&amp; oldestLotExpire &lt; newerThanExpireDate"
                                 type="div" style="text-danger"/>
-                        <dynamic-dialog id="ItemReserveDialog" button-text="Reserve Assets" transition="ItemReserve" condition="orderPartInfo.partEditable"/>
+                        <dynamic-dialog id="ItemReserveDialog" button-text="Reserve Assets" transition="ItemReserve" condition="orderPartInfo.partEditable || orderPartInfo.orderPart.statusId == 'OrderApproved'"/>
                     </conditional-field>
                     <default-field><display text=" "/></default-field>
                 </field>
