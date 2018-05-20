@@ -185,15 +185,6 @@ along with this software (see the LICENSE.md file). If not, see
             <!-- get shippingOptions for initial load (before drop-down dynamic call with rates which may be slow) -->
             <service-call name="mantle.shipment.ShipmentServices.get#ShipmentShippingOptions" out-map="context"
                     in-map="[shipmentId:shipmentId, getRates:false]"/>
-
-            <entity-find-one entity-name="mantle.party.PartyDetail" value-field="curCarrierDetail" cache="true">
-                <field-map field-name="partyId" from="firstRouteSegment.carrierPartyId"/></entity-find-one>
-            <entity-find-one entity-name="moqui.basic.Enumeration" value-field="curShipmentMethodEnum">
-                <field-map field-name="enumId" from="firstRouteSegment.shipmentMethodEnumId"/></entity-find-one>
-            <entity-find-one entity-name="mantle.shipment.carrier.CarrierShipmentMethod" value-field="curCarrierShipmentMethod">
-                <field-map field-name="carrierPartyId" from="firstRouteSegment.carrierPartyId"/>
-                <field-map field-name="shipmentMethodEnumId" from="firstRouteSegment.shipmentMethodEnumId"/>
-            </entity-find-one>
         </if>
 
         <set field="defaultNetworkPrinterId" from="ec.user.getPreference('Shipment.networkPrinterId.default')"/>
@@ -235,9 +226,6 @@ along with this software (see the LICENSE.md file). If not, see
                         </form-single>
                     </container-dialog>
                     <link url="cancelShipment" text="Cancel Shipment" condition="!anyItemPacked" confirmation="Really cancel shipment?"/>
-                    <link url="ShipmentPick.pdf" text="Pick PDF" style="btn-info"/>
-                    <link url="ShipmentByPackage.pdf" text="Package PDF" style="btn-info"/>
-                    <link url="ShipmentPack.pdf" text="Pack Insert PDF"/>
                 </fail-widgets></section>
             </widgets></section>
             <section name="ShipPickedSection" condition="shipment.statusId == 'ShipPicked'"><widgets>
@@ -258,10 +246,7 @@ along with this software (see the LICENSE.md file). If not, see
                     </container-dialog>
                     <link url="cancelShipment" text="Cancel Shipment" condition="!anyItemPacked" confirmation="Really cancel shipment?">
                         <parameter name="shipmentId"/></link>
-                    <link url="ShipmentPick.pdf" text="Pick PDF" style="btn-info"/>
                 </fail-widgets></section>
-                <link url="ShipmentByPackage.pdf" text="Package PDF" style="btn-info"/>
-                <link url="ShipmentPack.pdf" text="Pack Insert PDF"/>
             </widgets></section>
 
             <container-dialog id="PrintLabelsDialog" button-text="Print Labels" condition="hasAnyLabels">
@@ -299,10 +284,6 @@ along with this software (see the LICENSE.md file). If not, see
                     <link url="shipShipment" text="Set Shipped" style="btn-success"/>
                     <link url="deliverShipment" text="Set Delivered" condition="isOutgoing"/>
                     <link url="deliverShipment" text="Set Delivered" confirmation="Set to Delivered? No additional items may be received once Delivered" condition="isTransfer"/>
-
-                    <link url="ShipmentPick.pdf" text="Pick PDF"/>
-                    <link url="ShipmentByPackage.pdf" text="Package PDF"/>
-                    <link url="ShipmentPack.pdf" text="Pack Insert PDF" style="btn-info"/>
                 </widgets></section>
             </widgets></section>
             <section name="ShipShippedSection" condition="shipment.statusId == 'ShipShipped'"><widgets>
@@ -324,11 +305,12 @@ along with this software (see the LICENSE.md file). If not, see
 
                     <link url="deliverShipment" text="Set Delivered" condition="isOutgoing"/>
                     <link url="deliverShipment" text="Set Delivered" confirmation="Set to Delivered? No additional items may be received once Delivered" condition="isTransfer"/>
-
-                    <link url="ShipmentPick.pdf" text="Pick PDF"/>
-                    <link url="ShipmentByPackage.pdf" text="Package PDF"/>
-                    <link url="ShipmentPack.pdf" text="Pack Insert PDF" style="btn-info"/>
                 </fail-widgets></section>
+            </widgets></section>
+            <section name="OutgoingTransferSection" condition="isOutgoing || isTransfer"><widgets>
+                <link url="ShipmentPick.pdf" text="Pick PDF" style="${shipment.statusId in ['ShipScheduled', 'ShipPicked'] ? 'btn-info' : ''}"/>
+                <link url="ShipmentByPackage.pdf" text="Package PDF" style="${shipment.statusId in ['ShipScheduled', 'ShipPicked'] ? 'btn-info' : ''}"/>
+                <link url="ShipmentPack.pdf" text="Pack Insert PDF" style="${shipment.statusId in ['ShipShipped', 'ShipPacked'] ? 'btn-info' : ''}"/>
             </widgets></section>
 
             <section-iterate name="OrderLinks" list="orderIdSet" entry="orderId"><widgets>
@@ -668,7 +650,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <entity-find entity-name="mantle.product.issuance.AssetAndIssuance" list="assetIssuanceList">
                         <econdition field-name="shipmentId"/><econdition field-name="productId" from="sid.productId"/></entity-find>
                 </if>
-                <set field="allowPack" from="(isOutgoing || isTransfer) &amp;&amp; shipment.statusId in ['ShipScheduled', 'ShipPicked'] &amp;&amp; quantityPackRemaining &gt; 0"/>
+                <set field="allowPack" from="(isOutgoing || isTransfer) &amp;&amp; shipment.statusId in ['ShipInput', 'ShipScheduled', 'ShipPicked'] &amp;&amp; quantityPackRemaining &gt; 0"/>
                 <if condition="isIncoming || isTransfer">
                     <set field="quantityRecRemaining" from="sid.quantity - (sid.quantityAcceptedTotal ?: 0) - (sid.quantityRejectedTotal ?: 0)"/>
                     <entity-find entity-name="mantle.product.asset.AssetAndReceipt" list="assetReceiptList">
@@ -694,13 +676,16 @@ along with this software (see the LICENSE.md file). If not, see
                         <container-dialog id="PackItemContainer" button-text="Pack/Issue Item" type="success">
                             <form-single name="PackItemForm" transition="packItem" map="sid">
                                 <field name="shipmentId"><default-field><hidden/></default-field></field>
-                                <field name="productId"><default-field><hidden/></default-field></field>
+                                <field name="productId"><default-field title="Product">
+                                    <display-entity entity-name="mantle.product.Product" text="ProductNameTemplate"/></default-field></field>
                                 <field name="shipmentPackageSeqId"><default-field title="Package"><drop-down>
                                     <option key="" text="New Package"/>
                                     <list-options list="shipmentPackageList" key="${shipmentPackageSeqId}" text="${shipmentPackageSeqId}"/>
                                 </drop-down></default-field></field>
                                 <field name="quantity" from="quantityPackRemaining">
                                     <default-field><text-line size="8"/></default-field></field>
+                                <field name="packDate" from="shipment.estimatedShipDate ?: ec.user.nowTimestamp">
+                                    <default-field title="Pack Date"><date-time/></default-field></field>
                                 <field name="assetId"><default-field title="Asset">
                                     <drop-down><dynamic-options transition="getAssetList" server-search="true" min-length="0"
                                             parameter-map="[facilityId:firstRouteSegment.originFacilityId, productId:productId, assetTypeEnumId:null, excludeZeroQoh:'true']"/></drop-down>
