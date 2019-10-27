@@ -32,6 +32,7 @@ along with this software (see the LICENSE.md file). If not, see
     <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
     <transition-include name="getProductList" location="component://SimpleScreens/template/product/ProductTransitions.xml"/>
     <transition-include name="getLotList" location="component://SimpleScreens/template/product/ProductTransitions.xml"/>
+    <transition-include name="getAssetPoolList" location="component://SimpleScreens/template/product/ProductTransitions.xml"/>
 
     <transition-include name="getFacilityList" location="component://SimpleScreens/template/facility/FacilityTransitions.xml"/>
     <transition-include name="getLocationList" location="component://SimpleScreens/template/facility/FacilityTransitions.xml"/>
@@ -47,7 +48,9 @@ along with this software (see the LICENSE.md file). If not, see
     <widgets>
         <link url="../FindAsset" text="Find Individual Assets"/>
         <link url="../SelectAsset" text="Move Asset"/>
+        <link url="../../Container" text="Containers"/>
         <link url="../../EditLots" text="Lots"/>
+        <link url="../../AssetPool" text="Pools"/>
         <link url="assetOnHand" text="On Hand Report"/>
 
         <container-dialog id="ReceiveAssetDialog" button-text="Receive Direct" width="800">
@@ -102,6 +105,11 @@ along with this software (see the LICENSE.md file). If not, see
                         <depends-on field="facilityId"/><depends-on field="locationSeqId"/></dynamic-options>
                 </drop-down></default-field></field>
 
+                <field name="assetPoolId">
+                    <default-field title="Pool"><drop-down allow-empty="true">
+                        <dynamic-options transition="getAssetPoolList" server-search="true" min-length="0"/></drop-down></default-field>
+                </field>
+
                 <field name="comments"><default-field title="Notes"><text-area cols="80" rows="3"/></default-field></field>
 
                 <field name="submitButton"><default-field title="Receive"><submit/></default-field></field>
@@ -115,6 +123,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <field-ref name="mfgPartyId"/><field-ref name="lotId"/><field-ref name="lotNumber"/>
                     <field-row><field-ref name="manufacturedDate"/><field-ref name="expectedEndOfLife"/></field-row>
                     <field-ref name="acquireCost"/>
+                    <field-ref name="assetPoolId"/>
                     <field-ref name="comments"/>
                     <field-ref name="submitButton"/>
                 </field-layout>
@@ -231,6 +240,11 @@ along with this software (see the LICENSE.md file). If not, see
                     <dynamic-options transition="getLotList" server-search="true" min-length="2"/></drop-down></header-field>
                 <default-field><display-entity entity-name="mantle.product.asset.LotAndMfgParty" text="LotNameTemplate"/></default-field>
             </field>
+            <field name="assetPoolId">
+                <header-field title="Asset Pool"><drop-down allow-empty="true">
+                    <dynamic-options transition="getAssetPoolList" server-search="true" min-length="0"/></drop-down></header-field>
+                <default-field><display-entity entity-name="mantle.product.asset.AssetPool" text="${pseudoId}: ${description}"/></default-field>
+            </field>
 
             <field name="availableToPromiseTotal" align="right" show-total="true"><header-field title="Available" show-order-by="true"/>
                 <default-field><display/></default-field></field>
@@ -246,17 +260,23 @@ along with this software (see the LICENSE.md file). If not, see
             <field name="physicalChange"><default-field title="PhI Diff">
                 <dynamic-dialog id="PhysicalChange" button-text="PhI Diff" transition="PhysicalChange" width="800" condition="productId"/>
             </default-field></field>
+            <field name="moveLink"><default-field title="Move">
+                <link url="../SelectAsset" text="Move" condition="quantityOnHandTotal"
+                        parameter-map="[productId:productId, facilityId:facilityId, locationSeqId:locationSeqId,
+                            containerId:containerId, lotId:lotId, assetPoolId:assetPoolId]"/>
+            </default-field></field>
 
             <field name="findButton"><header-field title="Find"><submit/></header-field></field>
 
             <form-list-column><field-ref name="assetsLink"/></form-list-column>
-            <form-list-column><field-ref name="pseudoId"/><field-ref name="productName"/></form-list-column>
-            <form-list-column><field-ref name="assetTypeEnumId"/><field-ref name="classEnumId"/></form-list-column>
-            <form-list-column><field-ref name="statusId"/><field-ref name="ownerPartyId"/></form-list-column>
-            <form-list-column><field-ref name="facilityId"/><field-ref name="lotId"/></form-list-column>
+            <form-list-column><field-ref name="pseudoId"/><field-ref name="productName"/><field-ref name="classEnumId"/></form-list-column>
+            <form-list-column><field-ref name="statusId"/><field-ref name="ownerPartyId"/>
+                <field-ref name="assetPoolId"/></form-list-column>
+            <form-list-column><field-ref name="facilityId"/><field-ref name="locationSeqId"/><field-ref name="lotId"/></form-list-column>
             <form-list-column><field-ref name="availableToPromiseTotal"/><field-ref name="quantityOnHandTotal"/></form-list-column>
             <form-list-column><field-ref name="physicalQuantity"/></form-list-column>
             <!-- <form-list-column><field-ref name="physicalChange"/></form-list-column> -->
+            <form-list-column><field-ref name="moveLink"/></form-list-column>
         </form-list>
     </widgets>
 </screen>

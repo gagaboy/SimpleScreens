@@ -201,7 +201,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <link url="placeOrder" text="Un-approve" link-type="hidden-form"
                         condition="orderHeader.statusId == 'OrderApproved'" confirmation="Un-approve order (change status back to Placed)?"/>
                 <link url="sendOrder" text="Order Sent" link-type="hidden-form"
-                        condition="orderHeader.statusId == 'OrderApproved'" confirmation="Mark order as Sent?"/>
+                        condition="orderHeader.statusId == 'OrderApproved' &amp;&amp; firstPartInfo.isCustomerInternalOrg" confirmation="Mark order as Sent?"/>
                 <link url="holdOrder" text="Hold" link-type="hidden-form" confirmation="Really hold order?"
                         condition="orderHeader.statusId in ['OrderPlaced', 'OrderProcessing', 'OrderApproved']"/>
 
@@ -213,7 +213,7 @@ along with this software (see the LICENSE.md file). If not, see
                         condition="orderHeader.statusId == 'OrderRequested'"/>
 
                 <link url="cancelOrder" text="Close Order" link-type="hidden-form" btn-type="warning"
-                        confirmation="Really close order? If no items shipped the order will be Cancelled. If partially shipped all items will be reduced to shipped quantity and the order will be Completed."
+                        confirmation="OrderDetailConfirmCloseOrder"
                         condition="orderHeader.statusId in ['OrderOpen', 'OrderPlaced', 'OrderProcessing', 'OrderApproved', 'OrderHold']"/>
 
                 <container-dialog id="AddPartDialog" button-text="Add Part"
@@ -657,7 +657,7 @@ along with this software (see the LICENSE.md file). If not, see
                             confirmation="Really create return for this order part?"
                             parameter-map="[orderId:orderId, orderPartSeqId:orderPart.orderPartSeqId]"/>
                     <link url="cancelOrderPart" text="Close Part" link-type="hidden-form" btn-type="warning"
-                            confirmation="Really close order part? If no items shipped the part will be Cancelled. If partially shipped all items will be reduced to shipped quantity and the part will be Completed."
+                            confirmation="OrderDetailConfirmClosePart"
                             condition="orderPartInfo.orderPart.statusId in ['OrderOpen', 'OrderPlaced', 'OrderProcessing', 'OrderApproved', 'OrderHold']"/>
 
                     <label text="Warning: both vendor and customer are internal organizations" style="text-danger" type="p"
@@ -720,9 +720,9 @@ along with this software (see the LICENSE.md file). If not, see
                         <label text="Pick Up Date" type="dt" condition="orderPartInfo.orderPart.estimatedPickUpDate"/>
                         <label text="${ec.l10n.format(orderPartInfo.orderPart.estimatedPickUpDate, 'yyyy-MM-dd HH:mm') ?: '\u00a0'}" type="dd"
                                 condition="orderPartInfo.orderPart.estimatedPickUpDate"/>
-                        <label text="Other Party Order ID" type="dt"/>
+                        <label text="Their Order ID" type="dt"/>
                         <label text="${orderPartInfo.orderPart.otherPartyOrderId ?: '\u00a0'}" type="dd"/>
-                        <label text="Other Party Order Date" type="dt" condition="orderPartInfo.orderPart.otherPartyOrderDate"/>
+                        <label text="Their Order Date" type="dt" condition="orderPartInfo.orderPart.otherPartyOrderDate"/>
                         <label text="${ec.l10n.format(orderPartInfo.orderPart.otherPartyOrderDate, 'yyyy-MM-dd HH:mm') ?: '\u00a0'}" type="dd"
                                 condition="orderPartInfo.orderPart.otherPartyOrderDate"/>
                         <section name="DuplicatesByOtherPartyOrderIdSection" condition="orderPartInfo.duplicateOrderPartList"><widgets>
@@ -768,7 +768,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <container style="col-lg-7">
                     <!-- Payment Information -->
                     <section name="PaymentInfoSection"><widgets>
-                        <label text="Payments total (${ec.l10n.formatCurrency(orderPartInfo.paymentsTotal ?: 0.0, orderHeader?.currencyUomId)}) is less than order part total (${ec.l10n.formatCurrency(orderPartInfo.orderPart.partTotal ?: 0.0, orderHeader?.currencyUomId)})"
+                        <label text="OrderDetailPartPaymentIncomplete"
                                 style="text-danger" type="p" condition="orderPartInfo.paymentsTotal &lt; orderPartInfo.orderPart.partTotal"/>
                         <label text="Payments total (${ec.l10n.formatCurrency(orderPartInfo.paymentsTotal ?: 0.0, orderHeader?.currencyUomId)}) is greater than order part total (${ec.l10n.formatCurrency(orderPartInfo.orderPart.partTotal ?: 0.0, orderHeader?.currencyUomId)})"
                                 style="text-warning" type="p" condition="(orderPartInfo.paymentsTotal?:0.0) &gt; (orderPartInfo.orderPart.partTotal?:0.0)"/>
@@ -1011,6 +1011,27 @@ along with this software (see the LICENSE.md file). If not, see
                     </form-single>
                 </container-dialog>
                 <link url="../QuickItems" text="Quick Add Items"/>
+
+                <link url="updateOrderPart" text="Ship Calc" btn-type="danger" icon="glyphicon glyphicon-remove"
+                        condition="orderPart.disableShippingCalc == 'Y'"
+                        parameter-map="[orderId:orderId, orderPartSeqId:orderPart.orderPartSeqId, disableShippingCalc:'N']"/>
+                <link url="updateOrderPart" text="Ship Calc" btn-type="success" icon="glyphicon glyphicon-ok"
+                        condition="orderPart.disableShippingCalc != 'Y'"
+                        parameter-map="[orderId:orderId, orderPartSeqId:orderPart.orderPartSeqId, disableShippingCalc:'Y']"/>
+
+                <link url="updateOrderPart" text="Tax Calc" btn-type="danger" icon="glyphicon glyphicon-remove"
+                        condition="orderPart.disableTaxCalc == 'Y'"
+                        parameter-map="[orderId:orderId, orderPartSeqId:orderPart.orderPartSeqId, disableTaxCalc:'N']"/>
+                <link url="updateOrderPart" text="Tax Calc" btn-type="success" icon="glyphicon glyphicon-ok"
+                        condition="orderPart.disableTaxCalc != 'Y'"
+                        parameter-map="[orderId:orderId, orderPartSeqId:orderPart.orderPartSeqId, disableTaxCalc:'Y']"/>
+
+                <link url="updateOrderPart" text="Promos" btn-type="danger" icon="glyphicon glyphicon-remove"
+                        condition="orderPart.disablePromotions == 'Y'"
+                        parameter-map="[orderId:orderId, orderPartSeqId:orderPart.orderPartSeqId, disablePromotions:'N']"/>
+                <link url="updateOrderPart" text="Promos" btn-type="success" icon="glyphicon glyphicon-ok"
+                        condition="orderPart.disablePromotions != 'Y'"
+                        parameter-map="[orderId:orderId, orderPartSeqId:orderPart.orderPartSeqId, disablePromotions:'Y']"/>
             </widgets></section>
 
             <form-list name="OrderItems" list="orderPartInfo.partOrderItemList" list-entry="orderItem" transition="updateItem">
@@ -1164,7 +1185,7 @@ along with this software (see the LICENSE.md file). If not, see
                                 <td class="text-center">${(auditInfo.changeReasonEnum.description)!(auditInfo.auditLog.changeReason)!''}</td>
                             </tr></#list></table>
                         </#assign>
-                        <a href="#" data-toggle="popover" data-trigger="hover" data-placement="left" data-html="true" data-title="Price History for Item ${orderItemSeqId}" data-content="${popoverContent?html}">Price History</a>
+                        <a role="button" data-toggle="popover" data-placement="left" data-title="${ec.resource.expand('Price History for Item ${orderItemSeqId}', null)}" data-content="${popoverContent?html}">${ec.l10n.localize('Price History')}</a>
                     ]]></text></render-mode>
                 </default-field></field>
                 <field name="quantity">
@@ -1188,7 +1209,7 @@ along with this software (see the LICENSE.md file). If not, see
                                 <td class="text-center">${(auditInfo.changeReasonEnum.description)!(auditInfo.auditLog.changeReason)!''}</td>
                             </tr></#list></table>
                         </#assign>
-                        <a href="#" data-toggle="popover" data-trigger="hover" data-placement="left" data-html="true" data-title="Quantity History for Item ${orderItemSeqId}" data-content="${popoverContent?html}">Quantity History</a>
+                        <a role="button" data-toggle="popover" data-placement="left" data-title="${ec.resource.expand('Quantity History for Item ${orderItemSeqId}', null)}" data-content="${popoverContent?html}">${ec.l10n.localize('Quantity History')}</a>
                     ]]></text></render-mode>
                 </default-field></field>
                 <field name="standardCost">
@@ -1206,7 +1227,7 @@ along with this software (see the LICENSE.md file). If not, see
                 </default-field></field>
 
                 <field name="assetReservations">
-                    <conditional-field condition="isProductItemType &amp;&amp; orderPartInfo.isVendorInternalOrg">
+                    <conditional-field condition="isShippable &amp;&amp; orderPartInfo.isVendorInternalOrg">
                         <section-iterate name="ReservationInfoSection" list="resInfoList" entry="resInfo"><widgets><container>
                             <link url="assetDetail" text="Asset ${resInfo.existingRes.assetId}" parameter-map="[assetId:resInfo.existingRes.assetId]" link-type="anchor"/>
                             <label text=" - Res: ${ec.l10n.format(resInfo.existingRes.quantity, null)}, Not Avail: ${ec.l10n.format(resInfo.existingRes.quantityNotAvailable, null)}, Not Issued: ${ec.l10n.format(resInfo.existingRes.quantityNotIssued, null)}"
@@ -1237,11 +1258,11 @@ along with this software (see the LICENSE.md file). If not, see
                 </field>
 
                 <field name="returns"><default-field>
-                    <label text="Billed:${returnableOut.isProductItemType ? ec.l10n.format(returnableOut.invoiceQuantity, '#,##0.###') : ec.l10n.format(returnableOut.invoiceTotal, '#,##0.00')}" type="div"/>
-                    <label text="Returned:${returnableOut.isProductItemType ? ec.l10n.format(returnableOut.returnedQuantity, '#,##0.###') : ec.l10n.format(returnableOut.returnedTotal, '#,##0.00')}" type="div"/>
+                    <label text="OrderDetailItemBilled" type="div"/>
+                    <label text="OrderDetailItemReturned" type="div"/>
                     <section-iterate name="ReturnLinkSection" list="returnIdSet" entry="returnId"><widgets>
                         <link url="editReturn" text="#${returnId}" link-type="anchor"/></widgets></section-iterate>
-                    <label text="Returnable:${returnableOut.isProductItemType ? ec.l10n.format(returnableOut.returnableQuantity, '#,##0.###') : ec.l10n.format(returnableOut.returnableTotal, '#,##0.00')}" type="div"/>
+                    <label text="OrderDetailItemReturnable" type="div"/>
                 </default-field></field>
                 <field name="returnItem">
                     <conditional-field condition="orderPartInfo.openReturnList &amp;&amp; returnableOut.returnableQuantity &gt; 0">
@@ -1277,6 +1298,6 @@ along with this software (see the LICENSE.md file). If not, see
                 <form-list-column><field-ref name="submitButton"/><field-ref name="closeButton"/></form-list-column>
             </form-list>
         </widgets></section-iterate>
-        <render-mode><text type="html,vuet"><![CDATA[<script>$(function () { $('[data-toggle="popover"]').popover(); })</script>]]></text></render-mode>
+        <render-mode><text type="html,vuet"><![CDATA[<script>$(function () { $('[data-toggle="popover"]').popover({ sanitize:false, html:true, trigger:"hover click" }); })</script>]]></text></render-mode>
     </widgets>
 </screen>

@@ -189,7 +189,7 @@ along with this software (see the LICENSE.md file). If not, see
         </form-single>
         -->
         <form-list name="InvoiceList" list="invoiceList" skip-form="true" header-dialog="true" select-columns="true"
-                   saved-finds="true" show-csv-button="true" show-all-button="true">
+                   saved-finds="true" show-csv-button="true" show-xlsx-button="true" show-all-button="true">
             <entity-find entity-name="mantle.account.invoice.InvoiceFindView" list="invoiceList">
                 <search-form-inputs default-order-by="invoiceDate,invoiceId" skip-fields="fromRoleTypeId,toRoleTypeId">
                     <default-parameters statusId="InvoiceInProcess,InvoiceFinalized,InvoiceSent,InvoiceAcked,InvoiceIncoming,InvoiceReceived,InvoiceApproved"
@@ -209,7 +209,7 @@ along with this software (see the LICENSE.md file). If not, see
                             ((dueDateDays as BigDecimal) / periodDaysBd).setScale(0, BigDecimal.ROUND_DOWN).intValue() + 1) : null
                     if (dueDateIdx != null && dueDateIdx > 5) dueDateIdx = 5
 
-                    if (statusId in ['InvoiceInProcess','InvoiceFinalized','InvoiceSent']) {
+                    if (statusId in ['InvoiceInProcess','InvoiceFinalized','InvoiceSent','InvoiceAcked']) {
                         if (invoiceDateIdx != null) receivableAgingList[invoiceDateIdx] = receivableAgingList[invoiceDateIdx] + unpaidTotal
                         if (dueDateIdx != null) receivableDueAgingList[dueDateIdx] = receivableDueAgingList[dueDateIdx] + unpaidTotal
                         hasReceivableAging.set(true)
