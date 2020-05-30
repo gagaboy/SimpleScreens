@@ -159,16 +159,23 @@ along with this software (see the LICENSE.md file). If not, see
         </if>
 
         <set field="shippingPostalAddressList" from="[]"/>
-        <if condition="isOutgoing &amp;&amp; toPartyId">
+        <if condition="(isOutgoing || isTransfer) &amp;&amp; toPartyId">
             <service-call name="mantle.party.ContactServices.get#PartyContactInfoList" out-map="toPartyShippingInfo"
                     in-map="[partyId:toPartyId, postalContactMechPurposeId:'PostalShippingDest']"/>
             <set field="shippingPostalAddressList" from="toPartyShippingInfo.postalAddressList ?: []"/>
 
+            <if condition="isTransfer &amp;&amp; lastRouteSegment.destinationFacilityId">
+                <service-call name="mantle.facility.ContactServices.get#FacilityContactInfo" out-map="destFacShippingInfo"
+                        in-map="[facilityId:lastRouteSegment.destinationFacilityId, postalContactMechPurposeId:'PostalShippingDest']"/>
+                <if condition="destFacShippingInfo.postalAddress"><script>shippingPostalAddressList.add(0, destFacShippingInfo)</script></if>
+            </if>
+
             <if condition="lastRouteSegment.destPostalContactMechId">
-                <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="curDestPaInfo"
-                        in-map="[partyId:toPartyId, postalContactMechId:lastRouteSegment.destPostalContactMechId]"/>
                 <if condition="!(lastRouteSegment.destPostalContactMechId in shippingPostalAddressList*.postalContactMechId)">
-                    <script>shippingPostalAddressList.add(0, curDestPaInfo)</script></if>
+                    <service-call name="mantle.party.ContactServices.get#PartyContactInfo" out-map="curDestPaInfo"
+                            in-map="[partyId:toPartyId, postalContactMechId:lastRouteSegment.destPostalContactMechId]"/>
+                    <script>shippingPostalAddressList.add(0, curDestPaInfo)</script>
+                </if>
             </if>
         </if>
         <if condition="isIncoming &amp;&amp; fromPartyId">
@@ -230,7 +237,6 @@ along with this software (see the LICENSE.md file). If not, see
             <section name="ShipInputSection" condition="shipment.statusId == 'ShipInput'"><widgets>
                 <section name="ShipInputInOutSection" condition="isIncoming"><widgets>
                     <link url="scheduleShipment" text="Set Scheduled" btn-type="success"/>
-                    <link url="shipShipment" text="Set Shipped"/>
                 </widgets><fail-widgets>
                     <!-- isOutgoing || isTransfer -->
                     <link url="scheduleShipment" text="Set Scheduled" btn-type="success"/>
@@ -239,9 +245,6 @@ along with this software (see the LICENSE.md file). If not, see
             </widgets></section>
             <section name="ShipScheduledSection" condition="shipment.statusId == 'ShipScheduled'"><widgets>
                 <section name="ShipScheduledInOutSection" condition="isIncoming"><widgets>
-                    <link url="shipShipment" text="Set Shipped"/>
-                    <link url="deliverShipment" text="Set Delivered" btn-type="success" condition="anyReceived"
-                            confirmation="Set as Delivered and generate invoice for order items as needed?"/>
                     <link url="receiveEntireShipment" text="Receive Entire Shipment"/>
                     <link url="requestShipmentLabels" text="Get Labels" condition="shippingGatewayConfigId &amp;&amp; !hasAllLabels"/>
                 </widgets><fail-widgets>
@@ -251,24 +254,47 @@ along with this software (see the LICENSE.md file). If not, see
                     <link url="shipShipment" text="Set Shipped" condition="hasNoItems"/>
                 </fail-widgets></section>
             </widgets></section>
-            <section name="ShipPickedSection" condition="shipment.statusId == 'ShipPicked'"><widgets>
-                <section name="ShipPickedInOuSection" condition="isIncoming"><widgets>
-                    <link url="shipShipment" text="Set Shipped"/>
-                </widgets><fail-widgets>
-                    <!-- isOutgoing || isTransfer -->
-                </fail-widgets></section>
-            </widgets></section>
             <section name="PackShipmentSection" condition="!isIncoming &amp;&amp; shipment.statusId in ['ShipScheduled', 'ShipPicked']"><widgets>
                 <!-- isOutgoing || isTransfer -->
                 <container-dialog id="SetPackedDialog" button-text="Set Packed" condition="anyItemPacked" type="success">
                     <label text="Not all items are packed, item quantities will be reduced to packed quantities."
                             type="p" style="text-warning" condition="!allItemsPacked"/>
                     <label text="An Invoice will be generated for this Shipment when it is Packed and the Invoice Date will be set to the Packed Date." type="p"/>
-                    <form-single name="SetPackedForm" transition="packShipment">
+                    <form-single name="SetPackedForm" transition="packShipment" focus-field="submitButton">
                         <field name="shipmentId"><default-field><display/></default-field></field>
                         <field name="packedDate" from="ec.user.nowTimestamp">
                             <default-field><date-time/></default-field></field>
                         <field name="submitButton"><default-field title="Set Packed"><submit/></default-field></field>
+                    </form-single>
+                </container-dialog>
+            </widgets></section>
+            <section name="ShipShipmentSection" condition="(isIncoming &amp;&amp; shipment.statusId in ['ShipInput', 'ShipScheduled', 'ShipPicked', 'ShipPacked']) ||
+                    ((isOutgoing || isTransfer) &amp;&amp; shipment.statusId == 'ShipPacked')"><widgets>
+                <container-dialog id="SetShippedDialog" button-text="Set Shipped" type="${isOutgoing || isTransfer ? (!hasAllTrackingCodes ? 'danger' : (!hasAllLabels ? 'warning' : 'success')) : 'primary'}">
+                    <label text="Set as Shipped? If a Shipment Shipped email is configured it will be sent to the Customer." condition="isOutgoing" style="text-success" type="p"/>
+                    <container><label text="Not all packages have Labels" type="strong" style="text-warning" condition="!hasAllLabels"/></container>
+                    <container><label text="Not all packages have Tracking Codes" type="strong" style="text-danger" condition="!hasAllTrackingCodes"/></container>
+                    <form-single name="SetShippedForm" transition="shipShipment" focus-field="submitButton">
+                        <field name="shipmentId"><default-field><display/></default-field></field>
+                        <field name="actualStartDate" from="ec.user.nowTimestamp">
+                            <default-field title="Actual Start"><date-time/></default-field></field>
+                        <field name="submitButton"><default-field title="Set Shipped"><submit/></default-field></field>
+                    </form-single>
+                </container-dialog>
+            </widgets></section>
+            <section name="DeliverShipmentSection" condition="(anyReceived &amp;&amp; shipment.statusId in ['ShipScheduled', 'ShipPacked', 'ShipShipped']) ||
+                    (isOutgoing &amp;&amp; shipment.statusId in ['ShipPacked', 'ShipShipped'])"><widgets>
+                <container-dialog id="SetDeliveredDialog" button-text="Set Delivered">
+                    <label text="Set as Delivered and generate invoice for order items if needed?" condition="isIncoming" type="p"/>
+                    <label text="Set as Delivered?" condition="isOutgoing" type="p"/>
+                    <label text="Set to Delivered? No additional items may be received once Delivered." condition="isTransfer"/>
+                    <label text="Not all items are received, item quantities will be reduced to received quantities."
+                            type="p" style="text-warning" condition="isIncoming &amp;&amp; !allReceived"/>
+                    <form-single name="SetDeliveredForm" transition="deliverShipment" focus-field="submitButton">
+                        <field name="shipmentId"><default-field><display/></default-field></field>
+                        <field name="actualArrivalDate" from="ec.user.nowTimestamp">
+                            <default-field title="Actual Arrival"><date-time/></default-field></field>
+                        <field name="submitButton"><default-field title="Set Delivered"><submit/></default-field></field>
                     </form-single>
                 </container-dialog>
             </widgets></section>
@@ -305,40 +331,35 @@ along with this software (see the LICENSE.md file). If not, see
                             <#if packageRouteSeg.returnLabelUrl?has_content>'${getShipmentLabelPath}?retLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}',</#if>
                         </#list>
                         ]);
+                        moqui.printUrlMain([
+                        <#list packageRouteSegList! as packageRouteSeg>
+                            <#if packageRouteSeg.internationalInvoiceUrl?has_content>'${getShipmentLabelPath}?intlInvoiceLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}',</#if>
+                            <#if packageRouteSeg.returnIntlInvoiceUrl?has_content>'${getShipmentLabelPath}?retLabel=true&intlInvoiceLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}',</#if>
+                        </#list>
+                        ]);
                     }
                     <#if localPrintAllLabels! == true>qzPrintAllLabels();</#if>
                 </m-script>
-                <button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="qzPrintAllLabels();"><i class="glyphicon glyphicon-print"></i> All Labels</button>
+                <button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="qzPrintAllLabels();"><i class="fa fa-print"></i> All Labels</button>
             ]]></text></render-mode></widgets></section>
             <section name="ShipPackedSection" condition="shipment.statusId == 'ShipPacked'"><widgets>
                 <section name="ShipPackedInSection" condition="isIncoming"><widgets>
-                    <link url="shipShipment" text="Set Shipped"><parameter name="shipmentId"/></link>
-                    <link url="deliverShipment" text="Set Delivered" btn-type="success" condition="anyReceived"
-                            confirmation="Set as Delivered and generate invoice for order items as needed?"/>
                     <link url="receiveEntireShipment" text="Receive Entire Shipment"><parameter name="shipmentId"/></link>
-                </widgets></section>
-                <section name="ShipPackedOutSection" condition="isOutgoing || isTransfer"><widgets>
-                    <link url="shipShipment" text="Set Shipped" btn-type="success"/>
-                    <link url="deliverShipment" text="Set Delivered" condition="isOutgoing"/>
-                    <link url="deliverShipment" text="Set Delivered" confirmation="Set to Delivered? No additional items may be received once Delivered" condition="isTransfer"/>
                 </widgets></section>
             </widgets></section>
             <section name="ShipShippedSection" condition="shipment.statusId == 'ShipShipped'"><widgets>
                 <section name="ShipShippedInOutSection" condition="isIncoming"><widgets>
-                    <link url="deliverShipment" text="Set Delivered" btn-type="success" condition="anyReceived"
-                            confirmation="Set as Delivered and generate invoice for order items as needed?"/>
                     <link url="unshipShipment" text="Set Packed (Un-Ship)"><parameter name="shipmentId"/></link>
                     <link url="receiveEntireShipment" text="Receive Entire Shipment" confirmation="Receive full quantity of all items with defaults?">
                         <parameter name="shipmentId"/></link>
                 </widgets><fail-widgets>
                     <link url="unshipShipment" text="Set Packed (Un-Ship)" confirmation="Set shipment status back to Packed?"/>
-                    <link url="deliverShipment" text="Set Delivered" condition="isOutgoing"/>
-                    <link url="deliverShipment" text="Set Delivered" confirmation="Set to Delivered? No additional items may be received once Delivered" condition="isTransfer"/>
                 </fail-widgets></section>
             </widgets></section>
             <section name="ShipDeliveredSection" condition="shipment.statusId == 'ShipDelivered'"><widgets>
                 <link url="shipShipment" text="Set Shipped (Un-deliver)"/>
             </widgets></section>
+
             <container-dialog id="CancelDialog" button-text="Cancel Shipment" condition="!(shipment.statusId in ['ShipDelivered', 'ShipRejected', 'ShipCancelled'])">
                 <label text="Invoices associated with this shipment will be CANCELLED: ${invoiceIdSet.join(', ')}"
                         condition="isOutgoing &amp;&amp; invoiceIdSet" type="p" style="text-danger"/>
@@ -354,14 +375,14 @@ along with this software (see the LICENSE.md file). If not, see
                 <link url="cancelShipment" text="Cancel Shipment"/>
             </container-dialog>
             <section name="OutgoingTransferSection" condition="isOutgoing || isTransfer"><widgets>
-                <link url="ShipmentPick.pdf" text="Pick" icon="glyphicon glyphicon-download" style="${shipment.statusId in ['ShipScheduled', 'ShipPicked'] ? 'btn-info' : ''}"/>
-                <render-mode><text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('/fop/apps/${appRoot}/Shipment/ShipmentPick?shipmentId=${shipmentId}')"><i class="glyphicon glyphicon-print"></i> Pick</button>]]></text></render-mode>
-                <link url="ShipmentPack.pdf" text="Pack" icon="glyphicon glyphicon-download" style="${shipment.statusId in ['ShipShipped', 'ShipPacked'] ? 'btn-info' : ''}"/>
-                <render-mode><text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('/fop/apps/${appRoot}/Shipment/ShipmentPack?shipmentId=${shipmentId}')"><i class="glyphicon glyphicon-print"></i> Pack</button>]]></text></render-mode>
-                <link url="ShipmentByPackage.pdf" text="Package##Shipment" icon="glyphicon glyphicon-download" style="${shipment.statusId in ['ShipScheduled', 'ShipPicked'] ? 'btn-info' : ''}"/>
-                <render-mode><text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('/fop/apps/${appRoot}/Shipment/ShipmentByPackage?shipmentId=${shipmentId}')"><i class="glyphicon glyphicon-print"></i> Package</button>]]></text></render-mode>
-                <link url="ShipmentInsert.pdf" text="Insert" icon="glyphicon glyphicon-download" style="${shipment.statusId in ['ShipShipped', 'ShipPacked'] ? 'btn-info' : ''}"/>
-                <render-mode><text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('/fop/apps/${appRoot}/Shipment/ShipmentInsert?shipmentId=${shipmentId}')"><i class="glyphicon glyphicon-print"></i> Insert</button>]]></text></render-mode>
+                <link url="ShipmentPick.pdf" text="Pick" icon="fa fa-download" style="${shipment.statusId in ['ShipScheduled', 'ShipPicked'] ? 'btn-info' : ''}"/>
+                <render-mode><text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('/fop/apps/${appRoot}/Shipment/ShipmentPick?shipmentId=${shipmentId}')"><i class="fa fa-print"></i> Pick</button>]]></text></render-mode>
+                <link url="ShipmentPack.pdf" text="Pack" icon="fa fa-download" style="${shipment.statusId in ['ShipShipped', 'ShipPacked'] ? 'btn-info' : ''}"/>
+                <render-mode><text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('/fop/apps/${appRoot}/Shipment/ShipmentPack?shipmentId=${shipmentId}')"><i class="fa fa-print"></i> Pack</button>]]></text></render-mode>
+                <link url="ShipmentByPackage.pdf" text="Package##Shipment" icon="fa fa-download" style="${shipment.statusId in ['ShipScheduled', 'ShipPicked'] ? 'btn-info' : ''}"/>
+                <render-mode><text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('/fop/apps/${appRoot}/Shipment/ShipmentByPackage?shipmentId=${shipmentId}')"><i class="fa fa-print"></i> Package</button>]]></text></render-mode>
+                <link url="ShipmentInsert.pdf" text="Insert" icon="fa fa-download" style="${shipment.statusId in ['ShipShipped', 'ShipPacked'] ? 'btn-info' : ''}"/>
+                <render-mode><text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('/fop/apps/${appRoot}/Shipment/ShipmentInsert?shipmentId=${shipmentId}')"><i class="fa fa-print"></i> Insert</button>]]></text></render-mode>
             </widgets></section>
 
             <section-iterate name="OrderLinks" list="orderIdSet" entry="orderId"><widgets>
@@ -402,7 +423,7 @@ along with this software (see the LICENSE.md file). If not, see
             </container-dialog>
 
             <!-- Address Selection - Outgoing -->
-            <section name="PostalAddressSelectDestSection" condition="isOutgoing &amp;&amp; (allowUpdate || shipment.statusId in ['ShipPacked', 'ShipShipped'])"><widgets>
+            <section name="PostalAddressSelectDestSection" condition="(isOutgoing || isTransfer) &amp;&amp; (allowUpdate || shipment.statusId in ['ShipPacked', 'ShipShipped'])"><widgets>
                 <container><dynamic-dialog id="AddPostalInfoDest" button-text="Add Shipping Address" transition="UpdateContactInfo" width="800"
                         parameter-map="[partyId:toPartyId, postalContactMechPurposeId:'PostalShippingDest', shipmentId:shipmentId]"/></container>
                 <label text="No shipping address selected" style="text-danger" type="p" condition="!lastRouteSegment.destPostalContactMechId"/>
@@ -538,12 +559,12 @@ along with this software (see the LICENSE.md file). If not, see
                     </conditional-field>
                 </field>
                 <field name="toPartyId">
-                    <conditional-field title="To Party" condition="isOutgoing &amp;&amp; allowUpdate">
+                    <conditional-field title="To Party" condition="(isOutgoing || isTransfer) &amp;&amp; allowUpdate">
                         <drop-down allow-empty="true"><dynamic-options transition="searchPartyList" server-search="true" min-length="2"/></drop-down>
                         <link url="editCustomer" text="${ec.resource.expand('PartyNameTemplate', '', toPartyDetail)}" link-type="anchor"
                                 condition="toPartyDetail" parameter-map="[partyId:toPartyId]"/>
                     </conditional-field>
-                    <conditional-field condition="isOutgoing" title="To Party">
+                    <conditional-field condition="toPartyId" title="To Party">
                         <link url="editCustomer" text="${ec.resource.expand('PartyNameTemplate', '', toPartyDetail)}" link-type="anchor"
                                 condition="toPartyDetail" parameter-map="[partyId:toPartyId]"/>
                     </conditional-field>
@@ -570,6 +591,10 @@ along with this software (see the LICENSE.md file). If not, see
                     </conditional-field>
                 </field>
 
+                <field name="priority"><default-field><radio no-current-selected-key="5">
+                    <option key="1"/><option key="2"/><option key="3"/><option key="4"/><option key="5"/>
+                    <option key="6"/><option key="7"/><option key="8"/><option key="9"/>
+                </radio></default-field></field>
                 <field name="handlingInstructions"><default-field title="Shipping Instructions">
                     <text-area rows="3" cols="80"/></default-field></field>
                 <field name="otherPartyOrderId"><conditional-field condition="!isTransfer" title="Their Order" tooltip="Other party purchase or sales order ID">
@@ -582,9 +607,13 @@ along with this software (see the LICENSE.md file). If not, see
                 <field name="shipBeforeDate"><default-field title="Ship Before"><date-time/></default-field></field>
 
                 <field name="estimatedReadyDate"><conditional-field condition="isOutgoing || isTransfer" title="Est Ready"><date-time/></conditional-field></field>
+                <field name="entryDate"><default-field title="Entry"><display/></default-field></field>
                 <field name="packedDate"><default-field title="Packed"><display/></default-field></field>
                 <field name="estimatedShipDate"><default-field title="Est Ship"><date-time/></default-field></field>
                 <field name="estimatedArrivalDate"><default-field title="Est Arrival"><date-time/></default-field></field>
+
+                <field name="actualStartDate" from="firstRouteSegment.actualStartDate"><default-field title="Actual Start"><display/></default-field></field>
+                <field name="actualArrivalDate" from="lastRouteSegment.actualArrivalDate"><default-field title="Actual Arrival"><display/></default-field></field>
 
                 <field name="submitButton"><default-field title="Update Shipment"><submit/></default-field></field>
 
@@ -594,12 +623,14 @@ along with this software (see the LICENSE.md file). If not, see
                     <fields-not-referenced/>
                     <field-row><field-ref name="otherPartyOrderId"/><field-ref name="signatureRequiredEnumId"/></field-row>
                     <field-row><field-ref name="shipAfterDate"/><field-ref name="shipBeforeDate"/></field-row>
-                    <field-row><field-ref name="estimatedReadyDate"/><field-ref name="packedDate"/></field-row>
+                    <field-row><field-ref name="estimatedReadyDate"/></field-row>
                     <field-row><field-ref name="estimatedShipDate"/><field-ref name="estimatedArrivalDate"/></field-row>
+                    <field-row><field-ref name="entryDate"/><field-ref name="packedDate"/></field-row>
+                    <field-row><field-ref name="actualStartDate"/><field-ref name="actualArrivalDate"/></field-row>
                     <field-ref name="submitButton"/>
                 </field-layout>
             </form-single>
-            <section name="PostalSelectJsOutSection" condition="isOutgoing"><widgets><render-mode><text type="html,vuet"><![CDATA[
+            <section name="PostalSelectJsOutSection" condition="isOutgoing || isTransfer"><widgets><render-mode><text type="html,vuet"><![CDATA[
                 <script>
                     $("#EditShipment_destPostalContactMechId").val($("input[name=shippingPostalContactMechId]:checked").val());
                     $("input[name=shippingPostalContactMechId]:radio").change( function() { $("#EditShipment_destPostalContactMechId").val($("input[name=shippingPostalContactMechId]:checked").val()); })
@@ -813,7 +844,10 @@ along with this software (see the LICENSE.md file). If not, see
 
         <!-- Items -->
         <container-box><box-header title="Shipment Items"/><box-toolbar>
-            <section name="ShipItemInputSection" condition="shipment.statusId in ['ShipInput', 'ShipScheduled']"><widgets>
+            <!-- NOTE: don't show this dialog for Sales Return and Purchase Return type shipments, causes issues when trying to
+                change the status to Delivered, and generally makes no sense as the system won't have data needed for responding
+                to returns, knowing that order items were returned, etc -->
+            <section name="ShipItemInputSection" condition="shipment.statusId in ['ShipInput', 'ShipScheduled'] &amp;&amp; !(shipment.shipmentTypeEnumId in ['ShpTpSalesReturn', 'ShpTpPurchaseReturn'])"><widgets>
                 <container-dialog id="AddItemContainer" button-text="Add Item">
                     <form-single name="AddItemForm" transition="addItem">
                         <field name="shipmentId"><default-field><hidden/></default-field></field>
@@ -929,16 +963,16 @@ along with this software (see the LICENSE.md file). If not, see
                             </row-actions>
                             <field name="shipmentId"><default-field><hidden/></default-field></field>
                             <field name="shipmentItemSourceId"><default-field><hidden/></default-field></field>
-                            <field name="orderId"><default-field title="Order">
-                                <link url="orderDetail" text="${orderId?:''}" link-type="anchor"/></default-field></field>
-                            <field name="orderItemSeqId"><default-field title="Item"><display/></default-field></field>
+                            <field name="orderId"><default-field title="Order Item">
+                                <link url="orderDetail" text="${orderId?:''}:${orderItemSeqId?:''}" link-type="anchor" condition="orderId"/></default-field></field>
+                            <!-- <field name="orderItemSeqId"><default-field title="Item"><display/></default-field></field> -->
 
                             <field name="quantitySis" from="quantity">
                                 <default-field title="Quantity"><display/></default-field></field>
                             <field name="quantityNotHandled"><default-field title="Not Issued"><display/></default-field></field>
 
                             <field name="invoiceId"><default-field title="Invoice Item">
-                                <link url="editInvoice" text="${invoiceId?:''}:${invoiceItemSeqId?:''}" link-type="anchor"/></default-field></field>
+                                <link url="editInvoice" text="${invoiceId?:''}:${invoiceItemSeqId?:''}" link-type="anchor" condition="invoiceId"/></default-field></field>
 
                             <field name="assetReservations">
                                 <conditional-field condition="existingResList">
@@ -964,7 +998,7 @@ along with this software (see the LICENSE.md file). If not, see
                                 <conditional-field condition="resPackForm" title="Pack Date"><date-time/></conditional-field>
                                 <default-field title="Pack Date"><display text=" "/></default-field>
                             </field>
-                            <field name="shipmentPackageSeqId" from="shipmentPackageList ? shipmentPackageList[0].shipmentPackageSeqId : null">
+                            <field name="shipmentPackageSeqId" from="shipmentPackageList ? shipmentPackageList.get(shipmentPackageList.size()-1).shipmentPackageSeqId : null">
                                 <conditional-field condition="resPackForm" title="Package##Shipment"><drop-down>
                                     <option key="" text="New"/>
                                     <list-options list="shipmentPackageList" key="${shipmentPackageSeqId}" text="${shipmentPackageSeqId}"/>
@@ -1000,8 +1034,13 @@ along with this software (see the LICENSE.md file). If not, see
                                 <default-field title="Reservation"><display/></default-field>
                             </field>
 
-                            <field name="orderId"><default-field title="Order"><link url="orderDetail" text="${orderId}" link-type="anchor"/></default-field></field>
-                            <field name="orderItemSeqId"><default-field title="Item"><display/></default-field></field>
+                            <field name="orderId"><default-field title="Order Item">
+                                <link url="orderDetail" text="${orderId}:${orderItemSeqId?:''}" link-type="anchor" condition="orderId"/></default-field></field>
+                            <!-- <field name="orderItemSeqId"><default-field title="Item"><display/></default-field></field> -->
+
+                            <field name="invoiceId"><default-field title="Invoice Item">
+                                <link url="editInvoice" text="${invoiceId?:''}:${invoiceItemSeqId?:''}" link-type="anchor" condition="invoiceId"/></default-field></field>
+
                             <field name="acctgTransList"><default-field title="TX">
                                 <section-iterate name="IssAcctgTransList" list="issAcctgTransList" entry="issAcctgTrans"><widgets>
                                     <link url="editTransaction" text="${issAcctgTrans.acctgTransId}" link-type="anchor"
@@ -1209,20 +1248,30 @@ along with this software (see the LICENSE.md file). If not, see
                                 target-window="_blank" condition="packageRouteSeg?.returnTrackingUrl"/>
 
                         <link url="${packageRouteSeg.labelUrl}" text="Label" url-type="plain" target-window="_blank"
-                                btn-type="info" icon="glyphicon glyphicon-download" condition="packageRouteSeg?.labelUrl"/>
-                        <link url="getShipmentLabel" text="Label" target-window="_blank" btn-type="info" icon="glyphicon glyphicon-download"
+                                btn-type="info" icon="fa fa-download" condition="packageRouteSeg?.labelUrl"/>
+                        <link url="getShipmentLabel" text="Label" target-window="_blank" btn-type="info" icon="fa fa-download"
                                 condition="packageRouteSeg?.labelImage"
                                 parameter-map="[shipmentId:shipmentId, shipmentPackageSeqId:packageRouteSeg.shipmentPackageSeqId, shipmentRouteSegmentSeqId:packageRouteSeg.shipmentRouteSegmentSeqId]"/>
                         <section name="QzPrintLabelSection" condition="packageRouteSeg?.labelUrl || packageRouteSeg?.labelImage"><widgets><render-mode>
-                            <text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlLabel('${getShipmentLabelPath}?shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}')"><i class="glyphicon glyphicon-print"></i> Label</button>]]></text></render-mode></widgets></section>
+                            <text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlLabel('${getShipmentLabelPath}?shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}')"><i class="fa fa-print"></i> Label</button>]]></text></render-mode></widgets></section>
+
+                        <link url="${packageRouteSeg.internationalInvoiceUrl}" text="Com. Invoice" url-type="plain" target-window="_blank"
+                                btn-type="info" icon="fa fa-download" condition="packageRouteSeg?.internationalInvoiceUrl"/>
+                        <section name="QzPrintIntlInvcSection" condition="packageRouteSeg?.internationalInvoiceUrl || packageRouteSeg?.internationalInvoice"><widgets><render-mode>
+                            <text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('${getShipmentLabelPath}?intlInvoiceLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}')"><i class="fa fa-print"></i> Com. Invoice</button>]]></text></render-mode></widgets></section>
 
                         <link url="${packageRouteSeg.returnLabelUrl}" text="Ret Label" url-type="plain" target-window="_blank"
-                                btn-type="info" icon="glyphicon glyphicon-download" condition="packageRouteSeg?.returnLabelUrl"/>
-                        <link url="getShipmentLabel" text="Ret Label" target-window="_blank" btn-type="info" icon="glyphicon glyphicon-download"
+                                btn-type="info" icon="fa fa-download" condition="packageRouteSeg?.returnLabelUrl"/>
+                        <link url="getShipmentLabel" text="Ret Label" target-window="_blank" btn-type="info" icon="fa fa-download"
                                 condition="packageRouteSeg?.returnLabelImage"
                                 parameter-map="[retLabel:'true', shipmentId:shipmentId, shipmentPackageSeqId:packageRouteSeg.shipmentPackageSeqId, shipmentRouteSegmentSeqId:packageRouteSeg.shipmentRouteSegmentSeqId]"/>
                         <section name="QzPrintRetLabelSection" condition="packageRouteSeg?.returnLabelUrl || packageRouteSeg?.returnLabelImage"><widgets><render-mode>
-                            <text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlLabel('${getShipmentLabelPath}?retLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}')"><i class="glyphicon glyphicon-print"></i> Ret Lbl</button>]]></text></render-mode></widgets></section>
+                            <text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlLabel('${getShipmentLabelPath}?retLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}')"><i class="fa fa-print"></i> Ret Lbl</button>]]></text></render-mode></widgets></section>
+
+                        <link url="${packageRouteSeg.returnIntlInvoiceUrl}" text="Ret Com Invc" url-type="plain" target-window="_blank"
+                                btn-type="info" icon="fa fa-download" condition="packageRouteSeg?.returnIntlInvoiceUrl"/>
+                        <section name="QzPrintRetIntlInvcSection" condition="packageRouteSeg?.returnIntlInvoiceUrl"><widgets><render-mode>
+                            <text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('${getShipmentLabelPath}?retLabel=true&intlInvoiceLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}')"><i class="fa fa-print"></i> Ret Com Invc</button>]]></text></render-mode></widgets></section>
 
                         <container-dialog id="PrintLabelDialog" button-text="Net Print" type="success"
                                 condition="(packageRouteSeg?.labelUrl || packageRouteSeg?.labelImage != null) &amp;&amp; networkPrinterList">
