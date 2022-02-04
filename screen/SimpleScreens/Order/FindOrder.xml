@@ -30,6 +30,7 @@ along with this software (see the LICENSE.md file). If not, see
     <transition-include name="searchPartyList" location="component://SimpleScreens/template/party/PartyForms.xml"/>
     <transition-include name="getProductList" location="component://SimpleScreens/template/product/ProductTransitions.xml"/>
     <transition-include name="getFacilityList" location="component://SimpleScreens/template/facility/FacilityTransitions.xml"/>
+    <transition-include name="getGeoCountryStates" location="component://SimpleScreens/template/party/PartyForms.xml"/>
 
     <transition name="getWhFacilitiesByOwner">
         <service-call name="mantle.facility.FacilityServices.get#FacilitiesByOwner"
@@ -176,13 +177,13 @@ along with this software (see the LICENSE.md file). If not, see
                 </container-dialog>
             </widgets></section>
         </row-col><row-col md="7" style="text-right">
-            <link url="../OrderIssuedInvoiced" text="Issued and Invoiced Report"/>
-            <link url="../SalesAnalysis" text="Sales Analysis Report"/>
-            <link url="../SalesSummary" text="Sales Summary Charts"/>
+            <link url="../OrderIssuedInvoiced" text="Issued and Invoiced Report" parameter-map="[customerPartyId:customerPartyId]"/>
+            <link url="../SalesAnalysis" text="Sales Analysis Report" parameter-map="[customerPartyId:customerPartyId]"/>
+            <link url="../SalesSummary" text="Sales Summary Charts" parameter-map="[customerPartyIds:customerPartyId]"/>
         </row-col></container-row>
 
         <form-list name="OrderList" list="orderList" skip-form="true" header-dialog="true" select-columns="true" saved-finds="true"
-                show-csv-button="true" show-all-button="true">
+                show-csv-button="true" show-xlsx-button="true" show-all-button="true">
             <entity-find entity-name="mantle.order.OrderPartFindView" list="orderList" use-clone="true">
                 <search-form-inputs default-order-by="-entryDate,orderId,orderPartSeqId"
                         skip-fields="vendorRoleTypeId,customerRoleTypeId,customerClassificationId,itemTypeEnumId">
@@ -206,7 +207,7 @@ along with this software (see the LICENSE.md file). If not, see
                     <econdition field-name="quantityNotAvailable" operator="equals" to-field-name="quantity" ignore="inventoryAvailable != 'none'"/>
                 </having-econditions>
                 <!-- NOTE: need to select issuedQuantity,quantityNotAvailable if having conditions are used (EntityFindBuilder doesn't yet add these to sub-select automatically) -->
-                <select-field field-name="orderPartSeqId${onlyPartlyShipped=='true' ? ',issuedQuantity' : ''}${inventoryAvailable in ['all','partial','none','notall'] ? ',quantityNotAvailable' : ''}${inventoryAvailable in ['partial','none'] ? ',quantity' : ''}"/>
+                <select-field field-name="currencyUomId,orderPartSeqId${onlyPartlyShipped=='true' ? ',issuedQuantity' : ''}${inventoryAvailable in ['all','partial','none','notall'] ? ',quantityNotAvailable' : ''}${inventoryAvailable in ['partial','none'] ? ',quantity' : ''}"/>
             </entity-find>
             <row-actions>
                 <!-- Customer Classification -->
@@ -262,8 +263,10 @@ along with this software (see the LICENSE.md file). If not, see
                 <default-field container-style="${salesChannelEnumId == 'ScWeb' ? 'text-strong text-success' : ''}">
                     <display-entity entity-name="moqui.basic.Enumeration"/></default-field>
             </field>
+            <field name="orderName"><header-field><text-find size="40"/></header-field>
+                <default-field><display/></default-field></field>
 
-            <field name="priority" align="center"><header-field show-order-by="true"><range-find size="4"/></header-field><default-field>
+            <field name="priority" align="center"><header-field show-order-by="true"><range-find/></header-field><default-field>
                 <display text="${priority == 1 ? '-- ' : (priority == 2 || priority == 3 ? '- ' : '')}${priority?:''}${priority == 1 ? ' --' : (priority == 2 || priority == 3 ? ' -' : '')}"
                         style="${priority == 1 ? 'text-strong text-danger' : (priority == 2 || priority == 3 ? 'text-strong text-warning' : '')}"/>
             </default-field></field>
@@ -299,7 +302,7 @@ along with this software (see the LICENSE.md file). If not, see
                 <default-field><display-entity entity-name="mantle.product.store.ProductStore" text="${productStoreId}: ${storeName}"/></default-field>
             </field>
             <field name="shippingInstructions">
-                <header-field show-order-by="true"><text-find/></header-field>
+                <header-field show-order-by="true"><text-find size="40"/></header-field>
                 <default-field><display text="${shippingInstructions?.take(35)?:''}${shippingInstructions?.length() &gt; 35 ? '...' : ''}" style="text-strong"/></default-field>
             </field>
 
@@ -377,6 +380,31 @@ along with this software (see the LICENSE.md file). If not, see
                 </container></widgets></section-iterate>
             </default-field></field>
 
+            <field name="countryGeoId">
+                <header-field title="Country" show-order-by="true">
+                    <!-- no default for find option field: no-current-selected-key="${ec.user.getPreference('PostalAddress.DefaultCountry') ?: 'USA'}" -->
+                    <drop-down allow-empty="true">
+                        <entity-options key="${geoId}" text="${geoName}">
+                            <entity-find entity-name="moqui.basic.Geo" list="geoList">
+                                <econdition field-name="geoTypeEnumId" value="GEOT_COUNTRY"/>
+                                <order-by field-name="geoName"/>
+                            </entity-find>
+                        </entity-options>
+                    </drop-down>
+                </header-field>
+                <default-field><display-entity entity-name="moqui.basic.Geo" text="${geoCodeAlpha3}"/></default-field>
+            </field>
+            <field name="stateProvinceGeoId">
+                <header-field title="State/Province" show-order-by="true">
+                    <drop-down allow-empty="true">
+                        <dynamic-options transition="getGeoCountryStates" value-field="geoId" label-field="label">
+                            <depends-on field="countryGeoId"/>
+                        </dynamic-options>
+                    </drop-down>
+                </header-field>
+                <default-field><display-entity entity-name="moqui.basic.Geo" text="${geoCodeAlpha2 ?: geoCodeAlpha3}"/></default-field>
+            </field>
+
             <field name="partTotal" align="right" show-total="sum">
                 <header-field show-order-by="true" title="Total"><range-find/></header-field>
                 <default-field><display currency-unit-field="currencyUomId"/></default-field>
@@ -422,19 +450,24 @@ along with this software (see the LICENSE.md file). If not, see
 
             <field name="submitButton"><header-field title="Find"><submit/></header-field></field>
 
-            <form-list-column><field-ref name="orderId"/><field-ref name="otherPartyOrderId"/>
-                <field-ref name="salesChannelEnumId"/></form-list-column>
-            <form-list-column><field-ref name="partStatusId"/><field-ref name="priority"/>
-                <field-ref name="partTotal"/></form-list-column>
-            <form-list-column><field-ref name="entryDate"/><field-ref name="placedDate"/>
-                <field-ref name="shipBeforeDate"/></form-list-column>
-            <form-list-column><field-ref name="facilityId"/><field-ref name="productStoreId"/>
-                <field-ref name="shippingInstructions"/></form-list-column>
-            <form-list-column><field-ref name="vendorPartyId"/><field-ref name="customerPartyId"/>
-                <field-ref name="otherParties"/></form-list-column>
-            <form-list-column><field-ref name="shipmentMethodEnumId"/><field-ref name="carrierPartyId"/>
-                <field-ref name="shipments"/></form-list-column>
-            <form-list-column><field-ref name="submitButton"/></form-list-column>
+            <columns>
+                <column><field-ref name="orderId"/><field-ref name="otherPartyOrderId"/>
+                    <field-ref name="salesChannelEnumId"/></column>
+                <column><field-ref name="partStatusId"/><field-ref name="priority"/>
+                    <field-ref name="partTotal"/></column>
+                <column><field-ref name="entryDate"/><field-ref name="placedDate"/>
+                    <field-ref name="shipBeforeDate"/></column>
+                <column><field-ref name="facilityId"/><field-ref name="productStoreId"/>
+                    <field-ref name="shippingInstructions"/></column>
+                <column><field-ref name="vendorPartyId"/><field-ref name="customerPartyId"/>
+                    <field-ref name="otherParties"/></column>
+                <column><field-ref name="shipmentMethodEnumId"/><field-ref name="carrierPartyId"/>
+                    <field-ref name="shipments"/></column>
+            </columns>
+            <columns type="mobile">
+                <column><field-ref name="orderId"/><field-ref name="partStatusId"/><field-ref name="partTotal"/></column>
+                <column><field-ref name="placedDate"/><field-ref name="productStoreId"/><field-ref name="customerPartyId"/></column>
+            </columns>
         </form-list>
         <!--
         <section name="ShowSql" condition="orderList_xafind?.getQueryTextList()"><widgets>

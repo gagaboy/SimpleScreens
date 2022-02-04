@@ -120,12 +120,28 @@ along with this software (see the LICENSE.md file). If not, see
         <default-response type="none"/>
     </transition>
 
+    <transition name="getContactMechPurposesByType">
+        <parameter name="contactMechTypeEnumId"/>
+        <actions>
+            <entity-find entity-name="mantle.party.contact.ContactMechPurpose" list="cmpList">
+                <econdition field-name="contactMechTypeEnumId" or-null="true"/>
+                <order-by field-name="description"/>
+            </entity-find>
+            <script>
+                def outList = []
+                for (cmp in cmpList) outList.add([value:cmp.contactMechPurposeId, label:cmp.description])
+                ec.web.sendJsonResponse(outList)
+            </script>
+        </actions>
+        <default-response type="none"/>
+    </transition>
+
     <!-- an example of a transition to call store#PartyContactInfo; this does a create or update -->
     <transition name="storeContactInfo"><service-call name="mantle.party.ContactServices.store#PartyContactInfo"/>
         <default-response url="."/></transition>
     <!-- this should ALWAYS be included for postal address forms (copy into your screen) -->
     <transition name="getGeoCountryStates"><service-call name="org.moqui.impl.BasicServices.get#GeoRegionsForDropDown"
-            in-map="[geoId:countryGeoId]" web-send-json-response="resultList"/>
+            in-map="[geoId:countryGeoId,term:term]" web-send-json-response="resultList"/>
         <default-response type="none"/></transition>
     <transition name="getGeoStateCounties"><service-call name="org.moqui.impl.BasicServices.get#GeoRegionsForDropDown"
             out-map="context" in-map="[geoId:stateGeoId, geoTypeEnumId:'GEOT_COUNTY']" web-send-json-response="resultList"/>
@@ -558,13 +574,16 @@ along with this software (see the LICENSE.md file). If not, see
                 <field-ref name="paymentGatewayConfigId"/>
 
                 <field-ref name="postalContactMechId"/>
+                <!-- TODO FUTURE qvt remove field-row-big.@title, use field titles -->
                 <field-row-big title="Address 1"><field-ref name="address1"/><field-ref name="unitNumber"/></field-row-big>
                 <field-ref name="address2"/>
+                <!-- TODO FUTURE qvt remove field-row-big.@title, use field titles -->
                 <field-row-big title="City/Zip"><field-ref name="city"/>
                     <field-ref name="postalCode"/><field-ref name="postalCodeExt"/></field-row-big>
                 <field-row-big title="Country/State"><field-ref name="countryGeoId"/>
                     <field-ref name="stateProvinceGeoId"/></field-row-big>
                 <field-ref name="telecomContactMechId"/>
+                <!-- TODO FUTURE qvt remove field-row-big.@title, use field titles -->
                 <field-row-big title="Phone"><field-ref name="countryCode"/><field-ref name="areaCode"/>
                     <field-ref name="contactNumber"/></field-row-big>
                 <field-ref name="submitButton"/>
